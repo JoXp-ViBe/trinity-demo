@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TRINITY</title>
+<meta name="description" content="Trinity — Enter the Matrix">
+<meta property="og:title" content="TRINITY">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23000'/%3E%3Cpolygon points='16,4 28,28 4,28' fill='none' stroke='%2300FF41' stroke-width='2'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='10' font-weight='bold' fill='%2300FF41'%3ET%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}
+</script>
+<style>
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000; color:#fff; font-family:'Inter',sans-serif; overflow:hidden; width:100vw; height:100vh; }
+canvas { display:block; position:fixed; inset:0; }
+
+/* ─── LOADER ─── */
+#loader {
+  position:fixed; inset:0; z-index:100; background:#000;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  transition: opacity 0.6s ease;
+}
+#loader.hidden { opacity:0; pointer-events:none; }
+.narrative { min-height:80px; margin-bottom:24px; text-align:center; }
+.narrative-line {
+  font-family:'Share Tech Mono',monospace; font-size:18px; color:#00FF41;
+  margin:6px 0; opacity:0; animation: fadeIn 0.3s forwards;
+  text-shadow: 0 0 8px rgba(0,255,65,0.5);
+}
+@keyframes fadeIn { to { opacity:1; } }
+.loader-title {
+  font-family:'Share Tech Mono',monospace; font-size:clamp(36px,8vw,72px);
+  letter-spacing:12px; display:flex; opacity:0; transition: opacity 0.4s ease;
+}
+.loader-title.visible { opacity:1; }
+.loader-title .char {
+  display:inline-block; min-width:0.6em; text-align:center;
+  color:#00FF41; text-shadow: 0 0 15px #00FF41, 0 0 30px rgba(0,255,65,0.3);
+  transition: color 0.2s, text-shadow 0.2s;
+}
+.loader-title .char.resolved { color:#fff; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
+.loader-cursor {
+  color:#00FF41; animation: blink 0.6s step-end infinite;
+  text-shadow: 0 0 10px #00FF41;
+}
+@keyframes blink { 50% { opacity:0; } }
+.loader-sub {
+  font-family:'Share Tech Mono',monospace; font-size:11px; text-transform:uppercase;
+  letter-spacing:3px; color:rgba(255,255,255,0.25); margin-top:16px;
+  opacity:0; animation: fadeIn 0.5s 0.2s forwards;
+}
+.loader-avatar {
+  width:120px; height:120px; border-radius:50%; margin-bottom:32px;
+  overflow:hidden; position:relative;
+  border: 1px solid rgba(0,255,65,0.2);
+  box-shadow: 0 0 40px rgba(0,255,65,0.2), 0 0 80px rgba(0,255,65,0.05);
+  opacity:0; animation: avatarReveal 1.5s 0.1s ease forwards;
+}
+.loader-avatar img { width:100%; height:100%; object-fit:cover; filter:grayscale(40%) brightness(0.8) contrast(1.2); }
+.loader-avatar::after {
+  content:''; position:absolute; inset:0;
+  background: radial-gradient(circle, transparent 40%, rgba(0,255,65,0.1) 100%);
+  mix-blend-mode: screen;
+}
+.loader-avatar .scan-line {
+  position:absolute; left:0; right:0; height:2px;
+  background: rgba(0,255,65,0.6);
+  box-shadow: 0 0 10px rgba(0,255,65,0.5), 0 0 20px rgba(0,255,65,0.3);
+  animation: avatarScan 2s linear infinite;
+}
+@keyframes avatarReveal {
+  0% { opacity:0; transform:scale(0.8); filter:blur(10px); }
+  60% { opacity:0.8; transform:scale(1.02); filter:blur(0); }
+  100% { opacity:1; transform:scale(1); filter:blur(0); }
+}
+@keyframes avatarScan {
+  0% { top:-2px; }
+  100% { top:100%; }
+}
+
+/* ─── GHOST FACES ─── */
+.ghost-face {
+  position:fixed; z-index:45; pointer-events:none;
+  width:80px; height:80px; border-radius:50%;
+  overflow:hidden; opacity:0;
+}
+.ghost-face img {
+  width:100%; height:100%; object-fit:cover;
+  filter: grayscale(100%) brightness(0.4) contrast(1.5);
+}
+.ghost-face::after {
+  content:''; position:absolute; inset:0;
+  background: radial-gradient(circle, rgba(0,255,65,0.15) 0%, transparent 70%);
+  mix-blend-mode: screen;
+}
+.ghost-face.active {
+  animation: ghostAppear 4s ease-in-out forwards;
+}
+@keyframes ghostAppear {
+  0% { opacity:0; transform:scale(0.5) rotate(-10deg); filter:blur(8px); }
+  15% { opacity:0.15; transform:scale(1) rotate(0deg); filter:blur(2px); }
+  30% { opacity:0.12; filter:blur(0); }
+  70% { opacity:0.08; transform:scale(1.05) rotate(3deg); filter:blur(1px); }
+  100% { opacity:0; transform:scale(1.1) rotate(5deg); filter:blur(6px); }
+}
+
+/* ─── SCANLINES ─── */
+#scanlines {
+  position:fixed; inset:0; z-index:101; pointer-events:none;
+  background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px);
+  opacity:0; animation: fadeIn 0.5s 0.3s forwards;
+  transition: opacity 0.6s ease;
+}
+#scanlines.hidden { opacity:0; }
+
+/* ─── WIDGET ─── */
+#widget {
+  position:fixed; z-index:50; right:48px; bottom:33%;
+  display:flex; flex-direction:column; align-items:flex-end; gap:12px;
+  opacity:0; transform:translateX(20px);
+  transition: opacity 0.8s ease 0.5s, transform 0.8s ease 0.5s;
+}
+#widget.visible { opacity:1; transform:translateX(0); }
+.widget-cta {
+  font-family:'Share Tech Mono',monospace; font-size:16px; letter-spacing:3px;
+  color:#00FF41; text-decoration:none; position:relative; padding:12px 24px;
+  border:1px solid rgba(0,255,65,0.3); background:rgba(0,0,0,0.6);
+  backdrop-filter:blur(4px); cursor:pointer; transition: all 0.3s;
+}
+.widget-cta:hover { border-color:#00FF41; background:rgba(0,255,65,0.1); box-shadow:0 0 20px rgba(0,255,65,0.2); }
+.widget-cta::before, .widget-cta::after {
+  content:attr(data-text); position:absolute; top:12px; left:24px; right:24px;
+  overflow:hidden; color:#00FF41;
+}
+.widget-cta::before { animation: glitchTop 3s infinite; clip-path:polygon(0 0,100% 0,100% 33%,0 33%); }
+.widget-cta::after { animation: glitchBottom 3s infinite; clip-path:polygon(0 67%,100% 67%,100% 100%,0 100%); }
+.widget-desc {
+  font-size:12px; color:rgba(255,255,255,0.4); text-align:right;
+  font-family:'Share Tech Mono',monospace; max-width:260px;
+}
+.widget-stats { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+.widget-stat {
+  font-family:'Share Tech Mono',monospace; font-size:11px;
+  color:rgba(255,255,255,0.5); display:flex; align-items:center; gap:6px;
+}
+.dot { width:6px; height:6px; border-radius:50%; display:inline-block; }
+.dot.green { background:#00FF41; box-shadow:0 0 6px #00FF41; }
+.dot.dim { background:rgba(255,255,255,0.3); }
+
+/* ─── BRAND LOGO ─── */
+#brand {
+  position:fixed; top:32px; left:32px; z-index:50;
+  display:flex; align-items:center; gap:16px;
+  opacity:0; transform:translateY(-20px);
+  transition: opacity 0.8s ease 0.8s, transform 0.8s ease 0.8s;
+}
+#brand.visible { opacity:1; transform:translateY(0); }
+.brand-logo {
+  width:64px; height:64px; border-radius:16px; position:relative;
+  overflow:hidden; flex-shrink:0;
+  box-shadow: 0 0 20px rgba(0,255,65,0.3), 0 0 40px rgba(0,255,65,0.1), inset 0 0 20px rgba(0,255,65,0.05);
+  border: 1px solid rgba(0,255,65,0.25);
+  animation: logoPulse 4s ease-in-out infinite;
+  perspective: 300px; transform-style:preserve-3d;
+  transition: transform 0.15s ease-out, box-shadow 0.3s ease;
+  cursor:pointer;
+}
+.brand-logo:hover {
+  box-shadow: 0 0 30px rgba(0,255,65,0.6), 0 0 60px rgba(0,255,65,0.3), 0 0 100px rgba(0,255,65,0.1);
+  border-color: rgba(0,255,65,0.5);
+}
+.brand-logo img { width:100%; height:100%; object-fit:cover; display:block; }
+.brand-logo::after {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background: linear-gradient(180deg, rgba(0,255,65,0.08) 0%, transparent 40%, transparent 60%, rgba(0,255,65,0.05) 100%);
+  mix-blend-mode: screen;
+}
+.brand-logo .scan {
+  position:absolute; inset:0; pointer-events:none;
+  background: linear-gradient(180deg, transparent 0%, rgba(0,255,65,0.1) 50%, transparent 100%);
+  background-size: 100% 8px;
+  animation: logoScan 3s linear infinite;
+  opacity:0.4;
+}
+@keyframes logoScan {
+  0% { transform:translateY(-100%); }
+  100% { transform:translateY(100%); }
+}
+@keyframes logoPulse {
+  0%,100% { box-shadow: 0 0 20px rgba(0,255,65,0.3), 0 0 40px rgba(0,255,65,0.1); }
+  50% { box-shadow: 0 0 25px rgba(0,255,65,0.5), 0 0 60px rgba(0,255,65,0.2), 0 0 80px rgba(0,255,65,0.05); }
+}
+.brand-text { display:flex; flex-direction:column; gap:2px; }
+.brand-name {
+  font-family:'Share Tech Mono',monospace; font-size:18px; font-weight:700;
+  color:#00FF41; letter-spacing:4px;
+  text-shadow: 0 0 10px rgba(0,255,65,0.5);
+}
+.brand-sub {
+  font-family:'Share Tech Mono',monospace; font-size:9px; text-transform:uppercase;
+  letter-spacing:3px; color:rgba(0,255,65,0.4);
+}
+@media (max-width:768px) {
+  #brand { top:16px; left:16px; gap:12px; }
+  .brand-logo { width:48px; height:48px; border-radius:12px; }
+  .brand-name { font-size:14px; letter-spacing:3px; }
+  .brand-sub { font-size:7px; }
+}
+
+/* ─── GLITCH ─── */
+@keyframes glitch {
+  0%,100% { transform:translate(0); }
+  2% { transform:translate(2px,1px) skew(5deg); }
+  4% { transform:translate(-1px,-1px); }
+  60% { transform:translate(0); }
+  62% { transform:translate(-2px,1px) skew(-3deg); }
+  64% { transform:translate(0); }
+}
+@keyframes glitchTop {
+  0%,100% { transform:translate(0); }
+  2% { transform:translate(2px,-1px); }
+  62% { transform:translate(-3px,1px) skew(-13deg); }
+  64% { transform:translate(0); }
+}
+@keyframes glitchBottom {
+  0%,100% { transform:translate(0); }
+  2% { transform:translate(-1px,2px); }
+  62% { transform:translate(-22px,5px) skew(21deg); }
+  64% { transform:translate(0); }
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width:1400px) {
+  #widget { bottom:24px; right:24px; }
+}
+@media (max-width:768px) {
+  #widget {
+    right:50%; transform:translateX(50%) scale(1.25);
+    top:72%; bottom:auto; align-items:center;
+  }
+  #widget.visible { transform:translateX(50%) scale(1.25); }
+  .widget-stats { flex-direction:row; gap:12px; }
+  .widget-cta { border-width:1px; }
+  .narrative-line { font-size:14px; }
+}
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="loader-avatar">
+    <img src="logo.jpg" alt="Trinity">
+    <div class="scan-line"></div>
+  </div>
+  <div class="narrative" id="narrative"></div>
+  <div class="loader-title" id="loaderTitle">
+    <span class="char">T</span><span class="char">R</span><span class="char">I</span><span class="char">N</span><span class="char">I</span><span class="char">T</span><span class="char">Y</span><span class="loader-cursor">&#9612;</span>
+  </div>
+  <div class="loader-sub">initializing neural interface...</div>
+</div>
+
+<div id="scanlines"></div>
+
+<div id="ghosts"></div>
+
+<div id="brand">
+  <div class="brand-logo">
+    <img src="logo.jpg" alt="Trinity">
+    <div class="scan"></div>
+  </div>
+  <div class="brand-text">
+    <div class="brand-name">TRINITY</div>
+    <div class="brand-sub">Trading Bot System</div>
+  </div>
+</div>
+
+<div id="widget">
+  <a href="dashboard.html" class="widget-cta" data-text="ENTER THE MATRIX">ENTER THE MATRIX</a>
+  <p class="widget-desc">AI-powered trading system</p>
+  <div class="widget-stats">
+    <div class="widget-stat"><span class="dot green"></span> <span id="stat-status">System ready</span></div>
+    <div class="widget-stat"><span class="dot dim"></span> <span id="stat-info">Awaiting connection</span></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ═══════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════
+const MG = 0x00FF41;
+const FLUID_SIZE = 128;
+const isMobile = /Mobi|Android/i.test(navigator.userAgent) || innerWidth < 768;
+const maxDPR = isMobile ? 1.5 : 2;
+const BLOOM_LEVELS = isMobile ? 2 : 3;
+
+// ═══════════════════════════════════════════════════════
+// RENDERER + CAMERA + SCENES
+// ═══════════════════════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, maxDPR));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x000000);
+document.body.appendChild(renderer.domElement);
+
+const aspect = innerWidth / innerHeight;
+const fov = aspect < 0.8 ? 55 : 40;
+const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 100);
+camera.position.z = 6;
+
+const scene = new THREE.Scene();
+const quadScene = new THREE.Scene();
+const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const quadGeo = new THREE.PlaneGeometry(2, 2);
+const quadMesh = new THREE.Mesh(quadGeo);
+quadScene.add(quadMesh);
+
+// ═══════════════════════════════════════════════════════
+// TEXTURES (Canvas2D generated)
+// ═══════════════════════════════════════════════════════
+function createMatrixTex() {
+  const s = 512, c = document.createElement('canvas');
+  c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, s, s);
+  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789TRINITY';
+  const cell = 16, grid = s / cell;
+  ctx.font = '13px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let y = 0; y < grid; y++) for (let x = 0; x < grid; x++) {
+    ctx.fillStyle = `rgba(0,255,65,${0.4 + Math.random() * 0.6})`;
+    ctx.fillText(chars[Math.floor(Math.random() * chars.length)], x * cell + cell / 2, y * cell + cell / 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
+
+function createNoiseTex() {
+  const s = 256, c = document.createElement('canvas');
+  c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  const d = ctx.createImageData(s, s);
+  for (let i = 0; i < d.data.length; i += 4) {
+    d.data[i] = Math.random() * 255;
+    d.data[i+1] = Math.random() * 255;
+    d.data[i+2] = Math.random() * 255;
+    d.data[i+3] = 255;
+  }
+  ctx.putImageData(d, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+function createLogoTex() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.font = '900 180px Inter, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('TRINITY', 512, 128);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+const matrixTex = createMatrixTex();
+const noiseTex = createNoiseTex();
+const logoTex = createLogoTex();
+
+// ═══════════════════════════════════════════════════════
+// SHARED SHADER CHUNKS
+// ═══════════════════════════════════════════════════════
+const quadVert = `void main(){gl_Position=vec4(position.xy,0.0,1.0);}`;
+
+// ═══════════════════════════════════════════════════════
+// FLUID SIMULATION (Navier-Stokes GPU)
+// ═══════════════════════════════════════════════════════
+const fluidTexelSize = new THREE.Vector2(1/FLUID_SIZE, 1/FLUID_SIZE);
+
+function makeFluidRT() {
+  return new THREE.WebGLRenderTarget(FLUID_SIZE, FLUID_SIZE, {
+    type: THREE.HalfFloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+    wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping
+  });
+}
+
+let fluidA = makeFluidRT(), fluidB = makeFluidRT(), curlRT = makeFluidRT();
+
+const curlMat = new THREE.ShaderMaterial({
+  uniforms: { uVel: {value:null}, uTs: {value:fluidTexelSize} },
+  vertexShader: quadVert,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uVel;
+    uniform vec2 uTs;
+    void main(){
+      vec2 uv=gl_FragCoord.xy*uTs;
+      float L=texture2D(uVel,uv-vec2(uTs.x,0)).y;
+      float R=texture2D(uVel,uv+vec2(uTs.x,0)).y;
+      float B=texture2D(uVel,uv-vec2(0,uTs.y)).x;
+      float T=texture2D(uVel,uv+vec2(0,uTs.y)).x;
+      gl_FragColor=vec4(0.5*((R-L)-(T-B)),0,0,1);
+    }`
+});
+
+const velMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uVel:{value:null}, uCurl:{value:null}, uTs:{value:fluidTexelSize},
+    uDt:{value:0}, uPointer:{value:new THREE.Vector2(0.5,0.5)},
+    uPtrVec:{value:new THREE.Vector2()}, uSplatR:{value:0.05}
+  },
+  vertexShader: quadVert,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uVel, uCurl;
+    uniform vec2 uTs, uPointer, uPtrVec;
+    uniform float uDt, uSplatR;
+    void main(){
+      vec2 uv=gl_FragCoord.xy*uTs;
+      vec2 vel=texture2D(uVel,uv).xy;
+      float cL=texture2D(uCurl,uv-vec2(uTs.x,0)).x;
+      float cR=texture2D(uCurl,uv+vec2(uTs.x,0)).x;
+      float cB=texture2D(uCurl,uv-vec2(0,uTs.y)).x;
+      float cT=texture2D(uCurl,uv+vec2(0,uTs.y)).x;
+      float cC=texture2D(uCurl,uv).x;
+      vec2 force=0.5*vec2(abs(cT)-abs(cB),abs(cR)-abs(cL));
+      float len=length(force)+1e-5;
+      force=force/len*cC*0.15*uDt;
+      vel+=force;
+      float dist=distance(uv,uPointer);
+      float splat=exp(-dist*dist/(uSplatR*uSplatR));
+      vel+=uPtrVec*splat*80.0*uDt;
+      gl_FragColor=vec4(vel,0,1);
+    }`
+});
+
+const divMat = new THREE.ShaderMaterial({
+  uniforms: { uVel:{value:null}, uTs:{value:fluidTexelSize} },
+  vertexShader: quadVert,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uVel;
+    uniform vec2 uTs;
+    void main(){
+      vec2 uv=gl_FragCoord.xy*uTs;
+      float L=texture2D(uVel,uv-vec2(uTs.x,0)).x;
+      float R=texture2D(uVel,uv+vec2(uTs.x,0)).x;
+      float B=texture2D(uVel,uv-vec2(0,uTs.y)).y;
+      float T=texture2D(uVel,uv+vec2(0,uTs.y)).y;
+      float div=-0.5*(R-L+T-B);
+      vec4 c=texture2D(uVel,uv);
+      gl_FragColor=vec4(c.xy,c.z,div);
+    }`
+});
+
+const presMat = new THREE.ShaderMaterial({
+  uniforms: { uPres:{value:null}, uTs:{value:fluidTexelSize} },
+  vertexShader: quadVert,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uPres;
+    uniform vec2 uTs;
+    void main(){
+      vec2 uv=gl_FragCoord.xy*uTs;
+      float pL=texture2D(uPres,uv-vec2(uTs.x,0)).z;
+      float pR=texture2D(uPres,uv+vec2(uTs.x,0)).z;
+      float pB=texture2D(uPres,uv-vec2(0,uTs.y)).z;
+      float pT=texture2D(uPres,uv+vec2(0,uTs.y)).z;
+      vec4 c=texture2D(uPres,uv);
+      float p=(pL+pR+pB+pT+c.w)*0.25;
+      gl_FragColor=vec4(c.xy,p,c.w);
+    }`
+});
+
+const gradMat = new THREE.ShaderMaterial({
+  uniforms: { uPres:{value:null}, uTs:{value:fluidTexelSize} },
+  vertexShader: quadVert,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uPres;
+    uniform vec2 uTs;
+    void main(){
+      vec2 uv=gl_FragCoord.xy*uTs;
+      float pL=texture2D(uPres,uv-vec2(uTs.x,0)).z;
+      float pR=texture2D(uPres,uv+vec2(uTs.x,0)).z;
+      float pB=texture2D(uPres,uv-vec2(0,uTs.y)).z;
+      float pT=texture2D(uPres,uv+vec2(0,uTs.y)).z;
+      vec4 c=texture2D(uPres,uv);
+      vec2 vel=c.xy-0.5*vec2(pR-pL,pT-pB);
+      gl_FragColor=vec4(vel,c.z,c.w);
+    }`
+});
+
+const advMat = new THREE.ShaderMaterial({
+  uniforms: { uVel:{value:null}, uTs:{value:fluidTexelSize}, uDt:{value:0} },
+  vertexShader: quadVert,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uVel;
+    uniform vec2 uTs;
+    uniform float uDt;
+    void main(){
+      vec2 uv=gl_FragCoord.xy*uTs;
+      vec2 vel=texture2D(uVel,uv).xy;
+      vec2 prev=uv-vel*uDt;
+      vec4 c=texture2D(uVel,prev);
+      c.xy*=0.995;
+      gl_FragColor=c;
+    }`
+});
+
+function fluidPass(mat, target) {
+  quadMesh.material = mat;
+  renderer.setRenderTarget(target);
+  renderer.render(quadScene, quadCam);
+}
+
+function swapFluid() { const t = fluidA; fluidA = fluidB; fluidB = t; }
+
+function runFluid(dt) {
+  curlMat.uniforms.uVel.value = fluidA.texture;
+  fluidPass(curlMat, curlRT);
+
+  velMat.uniforms.uVel.value = fluidA.texture;
+  velMat.uniforms.uCurl.value = curlRT.texture;
+  velMat.uniforms.uDt.value = dt;
+  fluidPass(velMat, fluidB);
+  swapFluid();
+
+  divMat.uniforms.uVel.value = fluidA.texture;
+  fluidPass(divMat, fluidB);
+  swapFluid();
+
+  for (let i = 0; i < 4; i++) {
+    presMat.uniforms.uPres.value = fluidA.texture;
+    fluidPass(presMat, fluidB);
+    swapFluid();
+  }
+
+  gradMat.uniforms.uPres.value = fluidA.texture;
+  fluidPass(gradMat, fluidB);
+  swapFluid();
+
+  advMat.uniforms.uVel.value = fluidA.texture;
+  advMat.uniforms.uDt.value = dt;
+  fluidPass(advMat, fluidB);
+  swapFluid();
+}
+
+// ═══════════════════════════════════════════════════════
+// QUAD-TREE TILE GENERATION
+// ═══════════════════════════════════════════════════════
+function generateQuadTree() {
+  const tiles = [], splitP = [0.5, 0.3, 0.15];
+  function sub(x, y, w, h, d) {
+    if (d > 2 || Math.random() > splitP[d]) { tiles.push({cx:x+w/2, cy:y+h/2, w, h}); return; }
+    const hw = w/2, hh = h/2;
+    sub(x,y,hw,hh,d+1); sub(x+hw,y,hw,hh,d+1);
+    sub(x,y+hh,hw,hh,d+1); sub(x+hw,y+hh,hw,hh,d+1);
+  }
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 8; c++) sub(c/8, r/6, 1/8, 1/6, 0);
+  return tiles;
+}
+
+const tiles = generateQuadTree();
+
+// Collect unique corners for crosshairs
+function collectCorners(tiles) {
+  const set = new Set(), corners = [];
+  tiles.forEach(({cx,cy,w,h}) => {
+    const x0=cx-w/2, x1=cx+w/2, y0=cy-h/2, y1=cy+h/2;
+    [[x0,y0],[x1,y0],[x0,y1],[x1,y1]].forEach(([x,y]) => {
+      const k = `${x.toFixed(6)},${y.toFixed(6)}`;
+      if (!set.has(k)) { set.add(k); corners.push([x,y]); }
+    });
+  });
+  return corners;
+}
+const corners = collectCorners(tiles);
+
+// ═══════════════════════════════════════════════════════
+// TILE MESH (InstancedBufferGeometry on cylinder)
+// ═══════════════════════════════════════════════════════
+const tileVert = `
+  attribute vec2 aPos;
+  attribute vec2 aScale;
+  attribute vec4 aRand;
+  uniform float uTime;
+  varying vec2 vUv;
+  varying vec2 vGlobalUv;
+  varying vec4 vRand;
+  varying float vIsFront;
+
+  void main(){
+    vUv = uv;
+    vRand = aRand;
+    vIsFront = step(0.5, abs(normal.z));
+
+    float gap = 0.92;
+    float uvX = aPos.x + position.x * aScale.x * gap;
+    float uvY = aPos.y + position.y * aScale.y * gap;
+    float depth = position.z * min(aScale.x, aScale.y) * 0.8;
+
+    vGlobalUv = vec2(aPos.x + position.x * aScale.x, aPos.y + position.y * aScale.y);
+
+    float PI = 3.14159265;
+    float theta = (uvX - 0.5) * PI;
+    float r = 7.0;
+
+    vec3 wp;
+    wp.x = sin(theta) * (r - depth);
+    wp.y = (uvY - 0.5) * 10.0;
+    wp.z = r - cos(theta) * (r - depth) - 4.0;
+
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(wp, 1.0);
+  }
+`;
+
+const tileFrag = `
+  precision highp float;
+  uniform float uTime;
+  uniform sampler2D uMatrixTex;
+  uniform sampler2D uLogoTex;
+  uniform sampler2D uNoiseTex;
+  uniform sampler2D uFluid;
+  varying vec2 vUv;
+  varying vec2 vGlobalUv;
+  varying vec4 vRand;
+  varying float vIsFront;
+
+  void main(){
+    // Side faces: dark with subtle fluid glow
+    if(vIsFront < 0.5){
+      vec2 fl = texture2D(uFluid, vGlobalUv).xy;
+      float glow = min(length(fl), 1.0) * 1.5;
+      gl_FragColor = vec4(0.02 + glow * 0.02, 0.04 + glow * 0.12, 0.03 + glow * 0.03, 1.0);
+      return;
+    }
+
+    float patId = floor(vRand.x * 3.0);
+    vec3 col;
+
+    if(patId < 1.0){
+      // Matrix rain
+      vec2 rainUv = vUv * vec2(4.0, 8.0);
+      float colId = floor(rainUv.x);
+      float speed = 0.3 + fract(sin(colId * 91.3) * 43758.5) * 0.7;
+      rainUv.y = fract(rainUv.y - uTime * speed);
+      vec4 ch = texture2D(uMatrixTex, fract(rainUv * 0.125));
+      float head = pow(1.0 - rainUv.y, 3.0);
+      float bright = ch.g * (0.2 + head * 0.8);
+      col = vec3(0.0, bright * 0.9, bright * 0.15);
+    } else if(patId < 2.0){
+      // Binary grid
+      vec2 gUv = floor(vUv * vec2(8.0, 12.0));
+      float bit = step(0.5, fract(sin(dot(gUv + floor(uTime * 2.0), vec2(12.9898, 78.233))) * 43758.5));
+      float glow = bit * (0.3 + 0.2 * sin(uTime * 3.0 + gUv.x * 0.5));
+      col = vec3(0.0, glow * 0.6, glow * 0.1);
+    } else {
+      // Green data gradient
+      float n = texture2D(uNoiseTex, vUv * 2.0 + uTime * 0.1).r;
+      float grad = smoothstep(0.0, 1.0, vUv.y + n * 0.3);
+      col = mix(vec3(0.0, 0.03, 0.0), vec3(0.0, 0.3, 0.05), grad);
+    }
+
+    // Logo overlay
+    float logoMode = floor(vRand.y * 3.0);
+    vec2 logoUv = vUv;
+    if(logoMode < 1.0){
+      logoUv = fract(logoUv * vec2(2.0, 1.0) + vec2(sin(uTime * 0.5) * 0.3, 0.0));
+    } else if(logoMode < 2.0){
+      logoUv.x = fract(logoUv.x + uTime * 0.1);
+    } else {
+      logoUv.y = fract(logoUv.y + uTime * 0.05 * (0.5 + vRand.z));
+    }
+    float logoA = texture2D(uLogoTex, logoUv).r;
+    float flicker = 0.5 + 0.5 * sin(uTime * (2.0 + vRand.w * 4.0));
+    col = mix(col, vec3(0.0, 0.6, 0.1), logoA * flicker * 0.4);
+
+    // Tile vignette
+    float vig = smoothstep(1.9, 0.1, length((vUv - 0.5) * 2.0));
+    col *= vig;
+
+    // CRT halftone
+    float ht = step(length(fract(vGlobalUv * 414.0) - 0.5), 0.35);
+    col = mix(col, col * ht, 0.5);
+
+    // Global vignette
+    float gVig = smoothstep(0.55, 0.05, length(vGlobalUv - 0.5));
+    col *= gVig;
+
+    // Fluid interaction — subtle green glow
+    vec2 fl = texture2D(uFluid, vGlobalUv).xy;
+    float flLen = min(length(fl), 1.0);
+    col += vec3(0.0, flLen * 0.15, flLen * 0.03);
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+const tileMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uTime: {value:0}, uMatrixTex: {value:matrixTex}, uLogoTex: {value:logoTex},
+    uNoiseTex: {value:noiseTex}, uFluid: {value:fluidA.texture}
+  },
+  vertexShader: tileVert, fragmentShader: tileFrag,
+  side: THREE.DoubleSide
+});
+
+{
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  const ig = new THREE.InstancedBufferGeometry();
+  ig.index = box.index;
+  ig.attributes.position = box.attributes.position;
+  ig.attributes.normal = box.attributes.normal;
+  ig.attributes.uv = box.attributes.uv;
+
+  const n = tiles.length;
+  const aPos = new Float32Array(n * 2);
+  const aScale = new Float32Array(n * 2);
+  const aRand = new Float32Array(n * 4);
+  tiles.forEach((t, i) => {
+    aPos[i*2] = t.cx; aPos[i*2+1] = t.cy;
+    aScale[i*2] = t.w; aScale[i*2+1] = t.h;
+    aRand[i*4] = Math.random(); aRand[i*4+1] = Math.random();
+    aRand[i*4+2] = Math.random(); aRand[i*4+3] = Math.random();
+  });
+  ig.setAttribute('aPos', new THREE.InstancedBufferAttribute(aPos, 2));
+  ig.setAttribute('aScale', new THREE.InstancedBufferAttribute(aScale, 2));
+  ig.setAttribute('aRand', new THREE.InstancedBufferAttribute(aRand, 4));
+  ig.instanceCount = n;
+
+  scene.add(new THREE.Mesh(ig, tileMat));
+}
+
+// ═══════════════════════════════════════════════════════
+// CROSSHAIRS (at tile intersections)
+// ═══════════════════════════════════════════════════════
+{
+  const plane = new THREE.PlaneGeometry(1, 1);
+  const ig = new THREE.InstancedBufferGeometry();
+  ig.index = plane.index;
+  ig.attributes.position = plane.attributes.position;
+  ig.attributes.uv = plane.attributes.uv;
+
+  const aCorner = new Float32Array(corners.length * 2);
+  corners.forEach(([x, y], i) => { aCorner[i*2] = x; aCorner[i*2+1] = y; });
+  ig.setAttribute('aCorner', new THREE.InstancedBufferAttribute(aCorner, 2));
+  ig.instanceCount = corners.length;
+
+  const crossMat = new THREE.ShaderMaterial({
+    uniforms: {},
+    transparent: true, depthWrite: false,
+    vertexShader: `
+      attribute vec2 aCorner;
+      varying vec2 vLuv;
+      void main(){
+        vLuv = uv;
+        float PI = 3.14159265;
+        float theta = (aCorner.x - 0.5) * PI;
+        float r = 7.0;
+        vec3 center = vec3(sin(theta)*r, (aCorner.y-0.5)*10.0, r-cos(theta)*r-4.0);
+        vec3 toCamera = normalize(cameraPosition - center);
+        vec3 right = normalize(cross(vec3(0,1,0), toCamera));
+        vec3 up2 = cross(toCamera, right);
+        float sz = 0.12;
+        vec3 wp = center + right * position.x * sz + up2 * position.y * sz;
+        gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+      }`,
+    fragmentShader: `
+      precision highp float;
+      varying vec2 vLuv;
+      void main(){
+        vec2 p = vLuv - 0.5;
+        float hArm = step(abs(p.y), 0.06) * step(abs(p.x), 0.4);
+        float vArm = step(abs(p.x), 0.06) * step(abs(p.y), 0.4);
+        if(hArm + vArm < 0.5) discard;
+        gl_FragColor = vec4(0.0, 1.0, 0.25, 0.2);
+      }`
+  });
+  scene.add(new THREE.Mesh(ig, crossMat));
+}
+
+// ═══════════════════════════════════════════════════════
+// LIGHTS
+// ═══════════════════════════════════════════════════════
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const pl1 = new THREE.PointLight(0xffffff, 5, 20); pl1.position.set(4, 4, 5); scene.add(pl1);
+const pl2 = new THREE.PointLight(0xffe0cc, 3, 20); pl2.position.set(-5, -1, 4); scene.add(pl2);
+const pl3 = new THREE.PointLight(0xffffff, 4, 15); pl3.position.set(0, 2, -3); scene.add(pl3);
+const dl = new THREE.DirectionalLight(0xffffff, 1); dl.position.set(0, 5, 5); scene.add(dl);
+
+// ═══════════════════════════════════════════════════════
+// ENVIRONMENT MAP
+// ═══════════════════════════════════════════════════════
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environment = envTex;
+
+// ═══════════════════════════════════════════════════════
+// RENDER TARGETS (background, scene, bloom)
+// ═══════════════════════════════════════════════════════
+function makeRT(w, h) {
+  return new THREE.WebGLRenderTarget(w, h, {
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat
+  });
+}
+
+let W = innerWidth * Math.min(devicePixelRatio, maxDPR);
+let H = innerHeight * Math.min(devicePixelRatio, maxDPR);
+let backgroundRT = makeRT(W, H);
+let sceneRT = makeRT(W, H);
+
+let bloomBrightRT = makeRT(W/4, H/4);
+let bloomRTs = [];
+for (let i = 0; i < BLOOM_LEVELS; i++) {
+  const s = Math.pow(2, i + 2);
+  bloomRTs.push({ h: makeRT(W/s, H/s), v: makeRT(W/s, H/s) });
+}
+
+// ═══════════════════════════════════════════════════════
+// BLOOM SHADERS
+// ═══════════════════════════════════════════════════════
+const brightMat = new THREE.ShaderMaterial({
+  uniforms: { uTex: {value:null} },
+  vertexShader: quadVert,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uTex;
+    void main(){
+      vec2 uv = gl_FragCoord.xy / vec2(${(W/4).toFixed(1)}, ${(H/4).toFixed(1)});
+      vec3 c = texture2D(uTex, uv).rgb;
+      vec3 bright = max(vec3(0), c - 0.35) * c;
+      gl_FragColor = vec4(bright, 1.0);
+    }`
+});
+
+const blurMat = new THREE.ShaderMaterial({
+  uniforms: { uTex:{value:null}, uDir:{value:new THREE.Vector2(1,0)}, uRes:{value:new THREE.Vector2()} },
+  vertexShader: quadVert,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uTex;
+    uniform vec2 uDir;
+    uniform vec2 uRes;
+    void main(){
+      vec2 uv = gl_FragCoord.xy / uRes;
+      vec2 off = uDir / uRes * 2.0;
+      vec3 c = texture2D(uTex, uv).rgb * 0.227;
+      c += texture2D(uTex, uv + off).rgb * 0.195;
+      c += texture2D(uTex, uv - off).rgb * 0.195;
+      c += texture2D(uTex, uv + off * 2.0).rgb * 0.122;
+      c += texture2D(uTex, uv - off * 2.0).rgb * 0.122;
+      c += texture2D(uTex, uv + off * 3.0).rgb * 0.054;
+      c += texture2D(uTex, uv - off * 3.0).rgb * 0.054;
+      c += texture2D(uTex, uv + off * 4.0).rgb * 0.016;
+      c += texture2D(uTex, uv - off * 4.0).rgb * 0.016;
+      gl_FragColor = vec4(c, 1.0);
+    }`
+});
+
+const bloomWeights = [0.3, 0.5, 0.8];
+const compUniforms = {
+  uScene: {value:null},
+  uBloom0: {value:null}, uBloom1: {value:null}, uBloom2: {value:null},
+  uRes: {value:new THREE.Vector2(W, H)},
+  uBoost: {value: isMobile ? 1.5 : 1.15},
+  uLevels: {value: BLOOM_LEVELS}
+};
+const compositeMat = new THREE.ShaderMaterial({
+  uniforms: compUniforms,
+  vertexShader: quadVert,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uScene, uBloom0, uBloom1, uBloom2;
+    uniform vec2 uRes;
+    uniform float uBoost;
+    uniform int uLevels;
+    void main(){
+      vec2 uv = gl_FragCoord.xy / uRes;
+      vec3 c = texture2D(uScene, uv).rgb;
+      c += texture2D(uBloom0, uv).rgb * ${bloomWeights[0]};
+      c += texture2D(uBloom1, uv).rgb * ${bloomWeights[1]};
+      if(uLevels > 2) c += texture2D(uBloom2, uv).rgb * ${bloomWeights[2]};
+      c *= uBoost;
+      gl_FragColor = vec4(c, 1.0);
+    }`
+});
+
+function runBloom() {
+  // Bright extract
+  brightMat.uniforms.uTex.value = sceneRT.texture;
+  quadMesh.material = brightMat;
+  renderer.setRenderTarget(bloomBrightRT);
+  renderer.render(quadScene, quadCam);
+
+  // Blur levels
+  let input = bloomBrightRT.texture;
+  for (let i = 0; i < BLOOM_LEVELS; i++) {
+    const lvl = bloomRTs[i];
+    const s = Math.pow(2, i + 2);
+    const rw = W/s, rh = H/s;
+
+    blurMat.uniforms.uTex.value = input;
+    blurMat.uniforms.uDir.value.set(1, 0);
+    blurMat.uniforms.uRes.value.set(rw, rh);
+    quadMesh.material = blurMat;
+    renderer.setRenderTarget(lvl.h);
+    renderer.render(quadScene, quadCam);
+
+    blurMat.uniforms.uTex.value = lvl.h.texture;
+    blurMat.uniforms.uDir.value.set(0, 1);
+    renderer.setRenderTarget(lvl.v);
+    renderer.render(quadScene, quadCam);
+
+    input = lvl.v.texture;
+  }
+
+  // Composite
+  compUniforms.uScene.value = sceneRT.texture;
+  compUniforms.uBloom0.value = bloomRTs[0].v.texture;
+  compUniforms.uBloom1.value = bloomRTs[Math.min(1, BLOOM_LEVELS-1)].v.texture;
+  compUniforms.uBloom2.value = bloomRTs[Math.min(2, BLOOM_LEVELS-1)].v.texture;
+  quadMesh.material = compositeMat;
+  renderer.setRenderTarget(null);
+  renderer.render(quadScene, quadCam);
+}
+
+// ═══════════════════════════════════════════════════════
+// GLASS SHADER
+// ═══════════════════════════════════════════════════════
+const glassVert = `
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vViewPos;
+  void main(){
+    vUv = uv;
+    vNormal = normalize(normalMatrix * normal);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vViewPos = mv.xyz;
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const glassFrag = `
+  precision highp float;
+  uniform sampler2D uBackground;
+  uniform sampler2D uFluid;
+  uniform sampler2D uNoise;
+  uniform vec2 uRes;
+  uniform vec2 uMouse;
+  uniform float uMouseVel;
+  uniform float uRoughness;
+  uniform float uTime;
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vViewPos;
+
+  float ggx(float NdH, float r){
+    float a = r * r;
+    float a2 = a * a;
+    float d = NdH * NdH * (a2 - 1.0) + 1.0;
+    return a2 / (3.14159 * d * d + 0.0001);
+  }
+
+  void main(){
+    vec2 screenUv = gl_FragCoord.xy / uRes;
+    vec2 fl = texture2D(uFluid, screenUv).xy;
+    vec2 refUv = screenUv + fl * 0.008;
+
+    float mouseProx = smoothstep(0.4, 0.0, distance(screenUv, uMouse));
+    float boost = mouseProx * uMouseVel;
+    float nv = texture2D(uNoise, vUv * 3.0 + uTime * 0.05).y;
+    float rough = smoothstep(0.3, 0.8, nv) * uRoughness;
+    float refPow = 0.15 * (1.0 + boost * 2.0);
+
+    vec3 refracted = vec3(0.0);
+    for(int i = 0; i < 8; i++){
+      float fi = float(i) / 8.0;
+      vec2 off = vec2(sin(fi*6.28), cos(fi*6.28)) * rough * 0.02;
+      float slide = fi * refPow;
+      vec2 rv = normalize(vViewPos.xy + 0.001) * slide;
+      vec2 su = refUv + off + rv * 0.1;
+      refracted.r += texture2D(uBackground, su + rv * 0.01).r;
+      refracted.g += texture2D(uBackground, su + rv * 0.02).g;
+      refracted.b += texture2D(uBackground, su + rv * 0.04).b;
+    }
+    refracted /= 8.0;
+
+    vec3 V = normalize(-vViewPos);
+    vec3 N = normalize(vNormal);
+    float specR = 0.003 + rough * 0.4;
+
+    vec3 L1 = normalize(vec3(4,4,5) - vViewPos);
+    vec3 H1 = normalize(L1 + V);
+    float s1 = ggx(max(dot(N, H1), 0.0), specR) * 0.6;
+
+    vec3 L2 = normalize(vec3(-5,-1,4) - vViewPos);
+    vec3 H2 = normalize(L2 + V);
+    float s2 = ggx(max(dot(N, H2), 0.0), specR) * 0.3;
+
+    vec3 spec = vec3(0.7, 1.0, 0.8) * (s1 + s2);
+
+    float cosT = max(dot(N, V), 0.0);
+    float F = 0.1 + 0.9 * pow(1.0 - cosT, 5.0);
+    vec3 refl = vec3(0.05, 0.25, 0.08) * F * 0.5;
+    vec3 autoIllum = vec3(0.0, 0.15, 0.03) * F * 0.15;
+
+    float flLen = length(fl);
+    vec3 col = refracted + spec + refl + autoIllum;
+    col *= 1.0 + flLen * 2.0;
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+const glassMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uBackground: {value: backgroundRT.texture},
+    uFluid: {value: fluidA.texture},
+    uNoise: {value: noiseTex},
+    uRes: {value: new THREE.Vector2(W, H)},
+    uMouse: {value: new THREE.Vector2(0.5, 0.5)},
+    uMouseVel: {value: 0},
+    uRoughness: {value: isMobile ? 0.0 : 0.1},
+    uTime: {value: 0}
+  },
+  vertexShader: glassVert,
+  fragmentShader: glassFrag
+});
+
+// ═══════════════════════════════════════════════════════
+// LOGO 3D (TextGeometry "TRINITY")
+// ═══════════════════════════════════════════════════════
+let logoGroup = null;
+let logoReady = false;
+
+const fontLoader = new FontLoader();
+fontLoader.load(
+  'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_bold.typeface.json',
+  (font) => {
+    const geo = new TextGeometry('TRINITY', {
+      font, size: 1.0, depth: 0.5,
+      bevelEnabled: true, bevelThickness: 0.05,
+      bevelSize: 0.03, bevelSegments: 4, curveSegments: 12
+    });
+    geo.computeBoundingBox();
+    const bb = geo.boundingBox;
+    const cx = (bb.max.x + bb.min.x) / 2;
+    const cy = (bb.max.y + bb.min.y) / 2;
+    const cz = (bb.max.z + bb.min.z) / 2;
+    geo.translate(-cx, -cy, -cz);
+
+    const maxDim = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z);
+    const targetSize = isMobile ? 2.5 : 4.0;
+    const s = targetSize / maxDim;
+
+    const mesh = new THREE.Mesh(geo, glassMat);
+    mesh.scale.set(s, s, s);
+
+    logoGroup = new THREE.Group();
+    logoGroup.add(mesh);
+
+    logoGroup.position.z = 3;
+    scene.add(logoGroup);
+
+    logoReady = true;
+    onLogoReady();
+  }
+);
+
+// ═══════════════════════════════════════════════════════
+// AVATAR DISC (fixed above green title, not rotating)
+// ═══════════════════════════════════════════════════════
+const avatarTex = new THREE.TextureLoader().load('logo.jpg');
+const avatarGeo = new THREE.CircleGeometry(0.7, 64);
+const avatarMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uTex: {value: avatarTex},
+    uTime: {value: 0},
+    uFluid: {value: fluidA.texture}
+  },
+  transparent: true,
+  side: THREE.DoubleSide,
+  vertexShader: `
+    varying vec2 vUv;
+    void main(){
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D uTex;
+    uniform float uTime;
+    varying vec2 vUv;
+    void main(){
+      vec2 centered = vUv - 0.5;
+      float dist = length(centered);
+      float mask = smoothstep(0.5, 0.45, dist);
+      float scan = smoothstep(0.01, 0.0, abs(fract(vUv.y * 20.0 - uTime * 0.5) - 0.5) - 0.45);
+      vec3 col = texture2D(uTex, vUv).rgb;
+      float lum = dot(col, vec3(0.299, 0.587, 0.114));
+      vec3 holo = mix(col, vec3(lum * 0.3, lum * 1.2, lum * 0.5), 0.4);
+      holo += vec3(0.0, 0.3, 0.05) * smoothstep(0.35, 0.5, dist);
+      holo += vec3(0.0, 0.15, 0.03) * scan;
+      float flick = 0.92 + 0.08 * sin(uTime * 7.0 + 3.14);
+      gl_FragColor = vec4(holo * flick, mask * flick * 0.85);
+    }
+  `
+});
+const avatarMesh = new THREE.Mesh(avatarGeo, avatarMat);
+avatarMesh.position.set(0, 1.2, 0.35);
+avatarMesh.scale.setScalar(isMobile ? 0.55 : 0.75);
+scene.add(avatarMesh);
+
+// ═══════════════════════════════════════════════════════
+// TITLE TEXT BEHIND LOGO (Canvas2D plane)
+// ═══════════════════════════════════════════════════════
+async function createTitle() {
+  await document.fonts.ready;
+  const cw = isMobile ? 2048 : 4096;
+  const ch = cw / 4;
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch;
+  const ctx = c.getContext('2d');
+
+  const fs = Math.floor(ch * 0.55);
+  ctx.font = `700 ${fs}px Inter, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  // Glow
+  ctx.save();
+  ctx.shadowBlur = 100;
+  ctx.shadowColor = 'rgba(0,255,65,0.4)';
+  ctx.fillStyle = 'rgba(0,255,65,0.15)';
+  ctx.fillText('TRINITY', cw/2, ch/2);
+  ctx.restore();
+
+  // Main
+  ctx.fillStyle = 'rgba(0,255,65,0.7)';
+  ctx.fillText('TRINITY', cw/2, ch/2);
+
+  const tex = new THREE.CanvasTexture(c);
+  const dist = camera.position.z - 0.3;
+  const vFov = camera.fov * Math.PI / 180;
+  const viewH = 2 * dist * Math.tan(vFov / 2);
+  const viewW = viewH * camera.aspect;
+  const pw = viewW * (isMobile ? 0.9775 : 0.85);
+  const ph = pw * (ch / cw);
+
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(pw, ph),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+  );
+  mesh.position.z = 0.3;
+  scene.add(mesh);
+}
+createTitle();
+
+// ═══════════════════════════════════════════════════════
+// MOUSE / POINTER STATE
+// ═══════════════════════════════════════════════════════
+let mouseX = 0.5, mouseY = 0.5;
+let smoothMX = 0.5, smoothMY = 0.5;
+let prevSMX = 0.5, prevSMY = 0.5;
+let mouseVel = 0;
+let ptrAccX = 0, ptrAccY = 0;
+
+function onPointerMove(e) {
+  const x = (e.clientX || (e.touches && e.touches[0].clientX)) || 0;
+  const y = (e.clientY || (e.touches && e.touches[0].clientY)) || 0;
+  mouseX = x / innerWidth;
+  mouseY = 1.0 - y / innerHeight;
+}
+
+window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('touchmove', (e) => {
+  if (e.target === renderer.domElement) e.preventDefault();
+}, { passive: false });
+
+// ═══════════════════════════════════════════════════════
+// LOGO ANIMATION STATE
+// ═══════════════════════════════════════════════════════
+let hoverVelX = 0, hoverVelY = 0;
+let spinAngle = 0;
+let logoScale = 0;
+let startTime = 0;
+const logoTargetQ = new THREE.Quaternion();
+const tmpQ = new THREE.Quaternion();
+const tmpE = new THREE.Euler();
+
+// Drag-to-rotate state
+let isDragging = false;
+let dragPrevX = 0, dragPrevY = 0;
+let dragVelX = 0, dragVelY = 0;
+let autoSpinBlend = 1.0; // 1 = full auto, 0 = manual control
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  isDragging = true;
+  dragPrevX = e.clientX;
+  dragPrevY = e.clientY;
+  dragVelX = 0;
+  dragVelY = 0;
+  hoverVelX = 0;
+  hoverVelY = 0;
+  spinAngle = 0;
+  renderer.domElement.style.cursor = 'grabbing';
+});
+
+window.addEventListener('pointerup', () => {
+  if (isDragging) {
+    isDragging = false;
+    renderer.domElement.style.cursor = 'grab';
+  }
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (!isDragging) return;
+  const dx = e.clientX - dragPrevX;
+  const dy = e.clientY - dragPrevY;
+  dragPrevX = e.clientX;
+  dragPrevY = e.clientY;
+  // Convert pixel delta to rotation velocity
+  dragVelY = dx * 0.005;
+  dragVelX = -dy * 0.005;
+});
+
+// Set grab cursor on canvas
+renderer.domElement.style.cursor = 'grab';
+
+// ═══════════════════════════════════════════════════════
+// ANIMATION LOOP
+// ═══════════════════════════════════════════════════════
+let lastTime = performance.now() / 1000;
+let elapsed = 0;
+let cubemapDone = false;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now() / 1000;
+  const dt = Math.min(now - lastTime, 0.05);
+  lastTime = now;
+  elapsed += dt;
+
+  // Smooth mouse
+  smoothMX += (mouseX - smoothMX) * Math.min(8 * dt, 1);
+  smoothMY += (mouseY - smoothMY) * Math.min(8 * dt, 1);
+  const dsx = smoothMX - prevSMX;
+  const dsy = smoothMY - prevSMY;
+  const rawLen = Math.sqrt(dsx * dsx + dsy * dsy);
+  mouseVel += (rawLen * 60 - mouseVel) * Math.min(8 * dt, 1);
+  mouseVel = Math.max(mouseVel, 0);
+  prevSMX = smoothMX; prevSMY = smoothMY;
+
+  // Pointer tracking for fluid — use actual mouse velocity for dynamic splats
+  const velScale = Math.pow(rawLen * 60 + 1.0, 1.6) - 1.0;
+  ptrAccX = dsx * 60 * (1.0 + velScale * 0.5);
+  ptrAccY = dsy * 60 * (1.0 + velScale * 0.5);
+
+  // Update fluid uniforms
+  velMat.uniforms.uPointer.value.set(smoothMX, smoothMY);
+  velMat.uniforms.uPtrVec.value.set(ptrAccX * 0.3, ptrAccY * 0.3);
+  velMat.uniforms.uSplatR.value = 0.03 + 0.06 * Math.min(1, mouseVel);
+
+  // Camera parallax — very subtle scene follow
+  camera.position.x += ((smoothMX - 0.5) * 0.4 - camera.position.x) * Math.min(2 * dt, 1);
+  camera.position.y += ((smoothMY - 0.5) * 0.3 - camera.position.y) * Math.min(2 * dt, 1);
+  camera.lookAt(0, 0, 0);
+
+  // Run fluid sim
+  runFluid(dt);
+
+  // Update tile + glass uniforms
+  tileMat.uniforms.uTime.value = elapsed;
+  tileMat.uniforms.uFluid.value = fluidA.texture;
+  glassMat.uniforms.uFluid.value = fluidA.texture;
+  glassMat.uniforms.uTime.value = elapsed;
+  glassMat.uniforms.uMouse.value.set(smoothMX, smoothMY);
+  glassMat.uniforms.uMouseVel.value = mouseVel;
+  avatarMat.uniforms.uTime.value = elapsed;
+
+  // Logo animation
+  if (logoGroup) {
+    // Entrance scale
+    if (startTime === 0) startTime = elapsed;
+    const te = Math.min((elapsed - startTime) / 2.0, 1.0);
+    const eased = 1 - Math.pow(1 - te, 3);
+    logoScale = eased;
+    logoGroup.scale.setScalar(logoScale);
+
+    if (isDragging) {
+      // ── DRAG MODE: user controls rotation directly ──
+      autoSpinBlend = 0;
+
+      // Apply drag rotation
+      tmpE.set(dragVelX, dragVelY, 0);
+      tmpQ.setFromEuler(tmpE);
+      logoGroup.quaternion.premultiply(tmpQ);
+
+      // Dampen drag velocity (so it doesn't stick)
+      dragVelX *= 0.85;
+      dragVelY *= 0.85;
+
+    } else {
+      // ── AUTO MODE: gentle spin + mouse follow ──
+      // Smoothly blend back to auto-spin
+      autoSpinBlend += (1.0 - autoSpinBlend) * Math.min(1.5 * dt, 1);
+
+      // Auto-spin (Z axis) — very slow and smooth
+      spinAngle += 0.013 * dt;
+
+      // Initial impulse — gentle
+      if (elapsed - startTime < 0.8) hoverVelY += 0.1 * dt;
+
+      // Carry drag momentum into hover velocity on release (gentle)
+      hoverVelX += dragVelX * 0.5;
+      hoverVelY += dragVelY * 0.5;
+      dragVelX *= 0.8;
+      dragVelY *= 0.8;
+
+      // Mouse-driven rotation — gentle, no dizziness
+      const sens = isMobile ? 0.04 : 0.015;
+      hoverVelX -= dsy * sens * 60 * autoSpinBlend;
+      hoverVelY += dsx * sens * 60 * autoSpinBlend;
+
+      // Friction — strong damping to prevent fast spinning
+      const friction = Math.pow(0.15, dt);
+      hoverVelX *= friction;
+      hoverVelY *= friction;
+
+      // Apply rotation
+      tmpE.set(hoverVelX * dt, hoverVelY * dt, spinAngle * dt * autoSpinBlend);
+      tmpQ.setFromEuler(tmpE);
+      logoGroup.quaternion.premultiply(tmpQ);
+
+      // Slerp back to target — only when auto blend is high enough
+      if (autoSpinBlend > 0.5) {
+        logoTargetQ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), spinAngle);
+        const slerpF = Math.min(0.15 * dt * autoSpinBlend, 1.0);
+        logoGroup.quaternion.slerp(logoTargetQ, slerpF);
+      }
+    }
+
+    // Vertical float
+    logoGroup.position.y = Math.sin(elapsed * 0.4) * 0.06;
+  }
+
+  // Render background (without logo)
+  if (logoGroup) logoGroup.visible = false;
+  renderer.setRenderTarget(backgroundRT);
+  renderer.render(scene, camera);
+  if (logoGroup) logoGroup.visible = true;
+
+  // Update glass background ref
+  glassMat.uniforms.uBackground.value = backgroundRT.texture;
+
+  // Render full scene
+  renderer.setRenderTarget(sceneRT);
+  renderer.render(scene, camera);
+
+  // Bloom + composite to screen
+  runBloom();
+}
+
+animate();
+
+// ═══════════════════════════════════════════════════════
+// RESIZE
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize', () => {
+  const a = innerWidth / innerHeight;
+  camera.aspect = a;
+  camera.fov = a < 0.8 ? 55 : 40;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+
+  W = innerWidth * Math.min(devicePixelRatio, maxDPR);
+  H = innerHeight * Math.min(devicePixelRatio, maxDPR);
+
+  backgroundRT.setSize(W, H);
+  sceneRT.setSize(W, H);
+  bloomBrightRT.setSize(W/4, H/4);
+  for (let i = 0; i < BLOOM_LEVELS; i++) {
+    const s = Math.pow(2, i + 2);
+    bloomRTs[i].h.setSize(W/s, H/s);
+    bloomRTs[i].v.setSize(W/s, H/s);
+  }
+
+  glassMat.uniforms.uRes.value.set(W, H);
+  compUniforms.uRes.value.set(W, H);
+});
+
+// ═══════════════════════════════════════════════════════
+// LOADER
+// ═══════════════════════════════════════════════════════
+const targetText = 'TRINITY';
+const charEls = document.querySelectorAll('#loaderTitle .char');
+const glitchPool = '!@#$%^&*()_+-=[]{}|;:<>?/~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const resolved = new Array(targetText.length).fill(false);
+const narrativeEl = document.getElementById('narrative');
+const loaderEl = document.getElementById('loader');
+const scanEl = document.getElementById('scanlines');
+const titleEl = document.getElementById('loaderTitle');
+const widgetEl = document.getElementById('widget');
+
+// Glitch cycling
+const glitchInterval = setInterval(() => {
+  charEls.forEach((el, i) => {
+    if (!resolved[i]) el.textContent = glitchPool[Math.floor(Math.random() * glitchPool.length)];
+  });
+}, 50);
+
+// Narrative typing
+async function typeMsg(msg, delay = 30) {
+  const line = document.createElement('div');
+  line.className = 'narrative-line';
+  narrativeEl.appendChild(line);
+  for (const ch of msg) {
+    line.textContent += ch;
+    await new Promise(r => setTimeout(r, delay));
+  }
+  await new Promise(r => setTimeout(r, 250));
+}
+
+async function playNarrative() {
+  await new Promise(r => setTimeout(r, 300));
+  await typeMsg('Wake up, Neo...');
+  await typeMsg('The Matrix has you...');
+  await typeMsg('Follow the white rabbit.');
+  await new Promise(r => setTimeout(r, 300));
+  narrativeEl.style.transition = 'opacity 0.4s';
+  narrativeEl.style.opacity = '0';
+  await new Promise(r => setTimeout(r, 400));
+  titleEl.classList.add('visible');
+  startResolve();
+}
+
+// Resolve characters
+let resolveIdx = 0;
+let resolveInterval = 200;
+const resolveOrder = [...Array(targetText.length).keys()].sort(() => Math.random() - 0.5);
+
+function startResolve() {
+  resolveNext();
+}
+
+function resolveNext() {
+  if (resolveIdx >= resolveOrder.length) {
+    allResolved();
+    return;
+  }
+  const i = resolveOrder[resolveIdx];
+  resolved[i] = true;
+  charEls[i].textContent = targetText[i];
+  charEls[i].classList.add('resolved');
+  resolveIdx++;
+  resolveInterval = Math.max(40, resolveInterval * 0.85);
+  setTimeout(resolveNext, resolveInterval);
+}
+
+let canHideLoader = false;
+function allResolved() {
+  clearInterval(glitchInterval);
+  canHideLoader = true;
+  tryHideLoader();
+}
+
+function onLogoReady() {
+  tryHideLoader();
+}
+
+function tryHideLoader() {
+  if (!canHideLoader && !logoReady) return;
+  // Wait for both resolved text + logo (or fallback)
+  if (canHideLoader || logoReady) hideLoader();
+}
+
+function hideLoader() {
+  loaderEl.classList.add('hidden');
+  scanEl.classList.add('hidden');
+  setTimeout(() => {
+    loaderEl.style.display = 'none';
+    widgetEl.classList.add('visible');
+    document.getElementById('brand').classList.add('visible');
+    startGhosts();
+  }, 600);
+}
+
+// Fallback: hide after 6s no matter what
+setTimeout(() => {
+  if (!loaderEl.classList.contains('hidden')) {
+    clearInterval(glitchInterval);
+    charEls.forEach((el, i) => { el.textContent = targetText[i]; el.classList.add('resolved'); });
+    hideLoader();
+  }
+}, 6000);
+
+playNarrative();
+
+// ═══════════════════════════════════════════════════════
+// WIDGET: Try to fetch bot status
+// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// BRAND LOGO TILT (3D parallax effect)
+// ═══════════════════════════════════════════════════════
+const brandLogo = document.querySelector('.brand-logo');
+let brandTiltX = 0, brandTiltY = 0;
+
+window.addEventListener('mousemove', (e) => {
+  if (!brandLogo) return;
+  const rect = brandLogo.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = (e.clientX - cx) / (innerWidth / 2);
+  const dy = (e.clientY - cy) / (innerHeight / 2);
+  brandTiltX = dy * -15; // tilt on X axis (vertical mouse = horizontal tilt)
+  brandTiltY = dx * 15;  // tilt on Y axis
+  brandLogo.style.transform = `rotateX(${brandTiltX}deg) rotateY(${brandTiltY}deg) scale(${1 + Math.abs(dx * dy) * 0.1})`;
+});
+
+// Click impulse on brand logo
+brandLogo.addEventListener('click', () => {
+  brandLogo.style.transition = 'transform 0.1s ease';
+  brandLogo.style.transform = 'rotateX(0) rotateY(360deg) scale(1.15)';
+  setTimeout(() => {
+    brandLogo.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    brandLogo.style.transform = `rotateX(${brandTiltX}deg) rotateY(${brandTiltY}deg) scale(1)`;
+  }, 300);
+  // Also spin the 3D logo
+  hoverVelY += 0.5;
+});
+
+// ═══════════════════════════════════════════════════════
+// GHOST FACES (mysterious floating Trinity heads)
+// ═══════════════════════════════════════════════════════
+const ghostContainer = document.getElementById('ghosts');
+const ghostPositions = [
+  { top:'8%', left:'75%', size:60 },
+  { top:'25%', left:'10%', size:90 },
+  { top:'60%', left:'80%', size:50 },
+  { top:'45%', left:'5%', size:70 },
+  { top:'80%', left:'65%', size:55 },
+  { top:'15%', left:'55%', size:45 },
+  { top:'70%', left:'25%', size:65 },
+  { top:'35%', left:'90%', size:40 },
+];
+let ghostIdx = 0;
+
+function spawnGhost() {
+  const pos = ghostPositions[ghostIdx % ghostPositions.length];
+  ghostIdx++;
+  const ghost = document.createElement('div');
+  ghost.className = 'ghost-face';
+  ghost.style.top = pos.top;
+  ghost.style.left = pos.left;
+  ghost.style.width = pos.size + 'px';
+  ghost.style.height = pos.size + 'px';
+  ghost.innerHTML = '<img src="logo.jpg" alt="">';
+  ghostContainer.appendChild(ghost);
+  requestAnimationFrame(() => ghost.classList.add('active'));
+  setTimeout(() => ghost.remove(), 4500);
+}
+
+function startGhosts() {
+  // First ghost after 2s, then random interval 5-12s
+  setTimeout(() => {
+    spawnGhost();
+    setInterval(() => {
+      if (Math.random() < 0.7) spawnGhost();
+    }, 5000 + Math.random() * 7000);
+  }, 2000);
+}
+
+// ═══════════════════════════════════════════════════════
+// WIDGET: Try to fetch bot status
+// ═══════════════════════════════════════════════════════
+// Demo mode — static status display
+document.getElementById('stat-status').textContent = 'System online';
+document.getElementById('stat-info').textContent = 'Demo mode';
+
+</script>
+</body>
+</html>
